@@ -1,0 +1,75 @@
+# Implementing insert method
+import ctypes
+
+class ReservedMemory():
+    def __init__(self, size: int) -> None:
+        self._reserved_memory = ctypes.create_string_buffer(size)
+
+    def __len__(self) -> int:
+        return len(self._reserved_memory)
+
+    def copy(self, mem_source, count=None, source_index=0, destination_index=0) -> None:
+        if count is None:
+            count = len(mem_source._reserved_memory) - source_index
+        self._reserved_memory[destination_index:destination_index+count] = mem_source._reserved_memory[source_index:source_index+count]
+
+    def __getitem__(self, k:int) -> int:
+        return ord(self._reserved_memory[k])
+
+    def __setitem__(self, k:int, val:int) -> None:
+        self._reserved_memory[k] = val
+
+class IntArray():
+    def __init__(self, bytes_per_element:int = 2) -> None:
+        self._resmem = None
+        self._size = 0
+        self._bytes_per_element = bytes_per_element
+        self._shift_val = 2**((self._bytes_per_element*8)-1)
+        self._min_val = -self._shift_val
+        self._max_val = self._shift_val - 1
+
+    def __len__(self) -> int:
+        return self._size
+
+    def __repr__(self) -> str:
+        if not self._resmem:
+            return "Empty IntArray"
+        return f"IntArray ({self._size} elements): [{', '.join(str(self[i]) for i in range(self._size))}]"
+
+    def __setitem__(self, k:int, val:int) -> None:
+        val_to_store = val + self._shift_val
+        for byte_index in range(self._bytes_per_element):
+            self._resmem[k*self._bytes_per_element + byte_index] = (val_to_store >> (8*byte_index)) & 255
+
+    def __getitem__(self, k:int) -> int:
+        stored_val = 0
+        for byte_index in range(self._bytes_per_element):
+            stored_val |= self._resmem[k*self._bytes_per_element + byte_index] << (8*byte_index)
+        return stored_val - self._shift_val
+
+    def append(self, val: int) -> None:
+        self._size += 1
+        new_resmem = ReservedMemory(self._size*self._bytes_per_element)
+        if self._resmem:
+            new_resmem.copy(self._resmem)
+        self._resmem = new_resmem
+        self.__setitem__(self._size-1, val)
+
+    def insert(self, index: int, val: int) -> None:
+        # Validate index
+        if not 0 <= index <= self._size:
+            raise IndexError("Index out of bounds.")
+        self._size += 1
+        new_resmem = ReservedMemory(self._size * self._bytes_per_element)
+
+        # Copy elements before index
+        if self._resmem and index > 0:
+            new_resmem.copy(self._resmem, count=index*self._bytes_per_element, source_index=0, destination_index=0)
+        # Copy elements after index
+        if self._resmem and index < self._size - 1:
+            new_resmem.copy(self._resmem,
+                            count=(self._size-1-index)*self._bytes_per_element,
+                            source_index=index*self._bytes_per_element,
+                            destination_index=(index+1)*self._bytes_per_element)
+        self._resmem = new_resmem
+        self.__setitem__(index, val)
